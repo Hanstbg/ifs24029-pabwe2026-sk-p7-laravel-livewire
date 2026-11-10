@@ -8,5 +8,15 @@
 http://:{$PORT:80} {
 	root * /app/public
 	encode zstd gzip
+
+	@buildAssets path /build/assets/*
+	header @buildAssets Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
 	php_server
 }
