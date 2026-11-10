@@ -7,27 +7,53 @@ use App\Features\Stock\Models\Stock;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/** @extends Factory<Stock> */
+/**
+ * @extends Factory<Stock>
+ */
 class StockFactory extends Factory
 {
     protected $model = Stock::class;
 
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
     public function definition(): array
     {
-        $quantity = fake()->numberBetween(0, 100);
-        $minStock = 5;
-
         return [
             'user_id' => User::factory(),
-            'name' => fake()->words(2, true),
-            'sku' => strtoupper(fake()->unique()->bothify('SKU-####')),
-            'description' => fake()->sentence(),
-            'quantity' => $quantity,
+            'name' => fake()->words(3, true),
+            'sku' => strtoupper(fake()->unique()->bothify('SKU-####-??')),
+            'description' => fake()->paragraph(),
+            'quantity' => 20,
             'unit' => 'pcs',
             'price' => fake()->randomFloat(2, 1000, 500000),
-            'min_stock' => $minStock,
-            'status' => StockStatus::fromQuantity($quantity, $minStock),
-            'cover_image_path' => null,
+            'min_stock' => 5,
+            'status' => StockStatus::AVAILABLE->value,
         ];
+    }
+
+    /**
+     * Indicate that the stock is running low.
+     */
+    public function lowStock(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'quantity' => 3,
+            'min_stock' => 5,
+            'status' => StockStatus::LOW_STOCK->value,
+        ]);
+    }
+
+    /**
+     * Indicate that the stock is empty.
+     */
+    public function outOfStock(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'quantity' => 0,
+            'status' => StockStatus::OUT_OF_STOCK->value,
+        ]);
     }
 }

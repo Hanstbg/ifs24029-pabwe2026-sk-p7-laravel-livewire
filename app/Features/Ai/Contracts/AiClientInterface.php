@@ -6,6 +6,10 @@ use App\Features\Ai\DTO\GeneratedStockItem;
 
 interface AiClientInterface
 {
-    /** @return array<int, GeneratedStockItem> */
-    public function generate(string $prompt, int $count = 5): array;
+    /**
+     * Generate multiple structured stock items based on a prompt.
+     *
+     * @return array<int, GeneratedStockItem>
+     */
+    public function generateStocks(string $prompt, int $count = 3): array;
 }

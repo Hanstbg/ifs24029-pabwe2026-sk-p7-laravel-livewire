@@ -5,87 +5,119 @@ namespace App\Features\Stock\Services;
 use App\Features\Stock\Contracts\StockRepositoryInterface;
 use App\Features\Stock\Enums\StockStatus;
 use App\Features\Stock\Models\Stock;
-use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 class StockService
 {
-    public function __construct(private StockRepositoryInterface $repository) {}
+    public function __construct(
+        protected StockRepositoryInterface $stockRepository
+    ) {}
 
-    public function list(User $user, ?string $search = null, ?string $status = null): LengthAwarePaginator
+    /**
+     * Get paginated stocks for the specified user.
+     */
+    public function getStocksForUser(int $userId, ?string $status = null, ?string $search = null, int $perPage = 10): LengthAwarePaginator
     {
-        return $this->repository->paginateForUser($user->id, $search, $status);
+        return $this->stockRepository->forUser($userId, $status, $search, $perPage);
     }
 
-    public function find(User $user, int $id): Stock
+    /**
+     * Create a new stock item for the user. Status is always derived from quantity vs min_stock.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function createStock(int $userId, array $data): Stock
     {
-        return $this->repository->findForUser($user->id, $id);
-    }
+        $quantity = (int) ($data['quantity'] ?? 0);
+        $minStock = (int) ($data['min_stock'] ?? 5);
 
-    public function create(User $user, array $data): Stock
-    {
-        $data['user_id'] = $user->id;
-        $data['unit'] = $data['unit'] ?: 'pcs';
-        $data['status'] = StockStatus::fromQuantity((int) $data['quantity'], (int) $data['min_stock'])->value;
-
-        return $this->repository->create($data);
-    }
-
-    public function update(Stock $stock, array $data): Stock
-    {
-        $data['unit'] = $data['unit'] ?: 'pcs';
-        $data['status'] = StockStatus::fromQuantity((int) $data['quantity'], (int) $data['min_stock'])->value;
-
-        return $this->repository->update($stock, $data);
-    }
-
-    public function delete(Stock $stock): void
-    {
-        if ($stock->cover_image_path) {
-            Storage::disk('public')->delete($stock->cover_image_path);
-        }
-
-        $this->repository->delete($stock);
-    }
-
-    public function adjustQuantity(Stock $stock, int $delta): Stock
-    {
-        $quantity = max(0, $stock->quantity + $delta);
-
-        return $this->repository->update($stock, [
+        return $this->stockRepository->create([
+            'user_id' => $userId,
+            'name' => $data['name'],
+            'sku' => $data['sku'] ?? null,
+            'description' => $data['description'] ?? null,
             'quantity' => $quantity,
-            'status' => StockStatus::fromQuantity($quantity, $stock->min_stock)->value,
+            'unit' => $data['unit'] ?? 'pcs',
+            'price' => $data['price'] ?? null,
+            'min_stock' => $minStock,
+            'status' => StockStatus::fromQuantity($quantity, $minStock)->value,
+            'cover_image_path' => $data['cover_image_path'] ?? null,
         ]);
     }
 
-    public function setCover(Stock $stock, UploadedFile $file): Stock
+    /**
+     * Update an existing stock item. Status is re-synced from quantity vs min_stock.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function updateStock(Stock $stock, array $data): bool
     {
-        if ($stock->cover_image_path) {
+        $quantity = (int) ($data['quantity'] ?? $stock->quantity);
+        $minStock = (int) ($data['min_stock'] ?? $stock->min_stock);
+
+        return $this->stockRepository->update($stock, [
+            'name' => $data['name'] ?? $stock->name,
+            'sku' => array_key_exists('sku', $data) ? $data['sku'] : $stock->sku,
+            'description' => array_key_exists('description', $data) ? $data['description'] : $stock->description,
+            'quantity' => $quantity,
+            'unit' => $data['unit'] ?? $stock->unit,
+            'price' => array_key_exists('price', $data) ? $data['price'] : $stock->price,
+            'min_stock' => $minStock,
+            'status' => StockStatus::fromQuantity($quantity, $minStock)->value,
+            'cover_image_path' => array_key_exists('cover_image_path', $data) ? $data['cover_image_path'] : $stock->cover_image_path,
+        ]);
+    }
+
+    /**
+     * Update or upload a cover photo for the stock.
+     */
+    public function updateCoverPhoto(Stock $stock, mixed $file): string
+    {
+        if ($stock->cover_image_path && Storage::disk('public')->exists($stock->cover_image_path)) {
             Storage::disk('public')->delete($stock->cover_image_path);
         }
 
-        $path = $file->store('covers', 'public');
+        $path = $file->store('stock-covers', 'public');
+        $this->updateStock($stock, ['cover_image_path' => $path]);
 
-        return $this->repository->update($stock, ['cover_image_path' => $path]);
+        return $path;
     }
 
-    /** @param array<int, array<string, mixed>> $rows */
-    public function bulkCreate(User $user, array $rows): int
+    /**
+     * Delete the cover photo of the stock.
+     */
+    public function deleteCoverPhoto(Stock $stock): bool
     {
-        foreach ($rows as $row) {
-            $this->create($user, [
-                'name' => $row['name'],
-                'sku' => $row['sku'] ?? null,
-                'description' => $row['description'] ?? null,
-                'quantity' => (int) ($row['quantity'] ?? 0),
-                'unit' => $row['unit'] ?? 'pcs',
-                'price' => $row['price'] ?? null,
-                'min_stock' => (int) ($row['min_stock'] ?? 5),
-            ]);
+        if ($stock->cover_image_path && Storage::disk('public')->exists($stock->cover_image_path)) {
+            Storage::disk('public')->delete($stock->cover_image_path);
         }
 
-        return count($rows);
+        return $this->updateStock($stock, ['cover_image_path' => null]);
+    }
+
+    /**
+     * Delete a stock item and its cover photo if exists.
+     */
+    public function deleteStock(Stock $stock): bool
+    {
+        if ($stock->cover_image_path && Storage::disk('public')->exists($stock->cover_image_path)) {
+            Storage::disk('public')->delete($stock->cover_image_path);
+        }
+
+        return $this->stockRepository->delete($stock);
+    }
+
+    /**
+     * Adjust quantity by a positive/negative delta (never below zero) and sync the status.
+     */
+    public function adjustQuantity(Stock $stock, int $delta): bool
+    {
+        $quantity = max(0, $stock->quantity + $delta);
+
+        return $this->stockRepository->update($stock, [
+            'quantity' => $quantity,
+            'status' => StockStatus::fromQuantity($quantity, $stock->min_stock)->value,
+        ]);
     }
 }
