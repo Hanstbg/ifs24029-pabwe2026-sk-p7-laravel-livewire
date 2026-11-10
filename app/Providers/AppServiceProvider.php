@@ -17,22 +17,36 @@ use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
+    /**
+     * Register any application services.
+     */
     public function register(): void
     {
         $this->app->bind(StockRepositoryInterface::class, StockRepository::class);
         $this->app->bind(AiClientInterface::class, OpenAiStockGeneratorService::class);
     }
 
+    /**
+     * Bootstrap any application services.
+     */
     public function boot(): void
     {
-        if (config('app.force_https') || $this->app->environment('production')) {
+        if (config('app.force_https', false)) {
             URL::forceScheme('https');
         }
+
+        Gate::policy(Stock::class, StockPolicy::class);
 
         RateLimiter::for('1000-per-second', function (Request $request) {
             return Limit::perSecond(1000)->by($request->user()?->id ?: $request->ip());
         });
 
-        Gate::policy(Stock::class, StockPolicy::class);
+        RateLimiter::for('global', function (Request $request) {
+            return Limit::perSecond(1000)->by($request->user()?->id ?: $request->ip());
+        });
+
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perSecond(1000)->by($request->user()?->id ?: $request->ip());
+        });
     }
 }

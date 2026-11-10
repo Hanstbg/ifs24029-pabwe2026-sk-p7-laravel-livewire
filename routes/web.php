@@ -5,43 +5,47 @@ use App\Features\Admin\Livewire\UserList;
 use App\Features\Auth\Http\LoginController;
 use App\Features\Auth\Livewire\Login;
 use App\Features\Auth\Livewire\Register;
-use App\Features\Profile\Livewire\Profile;
-use App\Features\Stock\Livewire\StockDetail;
 use App\Features\Stock\Livewire\StockList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('throttle:1000-per-second')->group(function () {
-    // Guest langsung melihat halaman login (HTTP 200, tanpa redirect).
-    // User yang sudah login diarahkan sesuai role lewat redirectUsersTo di bootstrap/app.php.
+Route::middleware(['throttle:1000-per-second'])->group(function () {
+    // Root: guest langsung melihat halaman login (HTTP 200),
+    // user yang sudah login diarahkan sesuai role (lihat redirectUsersTo di bootstrap/app.php).
     Route::get('/', Login::class)->middleware('guest')->name('home');
 
+    // Guest Authentication Routes
     Route::middleware('guest')->group(function () {
         Route::get('/login', Login::class)->name('login');
         Route::post('/login', [LoginController::class, 'store'])->name('login.store');
         Route::get('/register', Register::class)->name('register');
     });
 
-    Route::post('/logout', function (Request $request) {
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect('/login');
-    })->middleware('auth')->name('logout');
-
+    // Authenticated Routes
     Route::middleware('auth')->group(function () {
-        Route::get('/profile', Profile::class)->name('profile');
+        Route::post('/logout', function (Request $request) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return redirect()->route('login');
+        })->name('logout');
 
-        Route::middleware('role:member')->group(function () {
-            Route::get('/stocks', StockList::class)->name('stocks.index');
-            Route::get('/stocks/{stock}', StockDetail::class)->middleware('owns.stock')->name('stocks.show');
-        });
+        // Member Stock Routes protected by ownership middleware
+        Route::get('/stocks', StockList::class)
+            ->middleware('owns.stock')
+            ->name('stocks.index');
+        Route::get('/stocks/{stock}', \App\Features\Stock\Livewire\StockDetail::class)
+            ->middleware('owns.stock')
+            ->name('stocks.show');
 
-        Route::middleware('role:admin')->prefix('admin')->group(function () {
-            Route::get('/users', UserList::class)->name('admin.users');
-            Route::get('/users/{user}/stocks', AdminUserStockList::class)->name('admin.users.stocks');
+        // User Profile Route
+        Route::get('/profile', \App\Features\Profile\Livewire\Profile::class)->name('profile');
+
+        // Admin Routes protected by Role middleware
+        Route::prefix('admin')->name('admin.')->middleware('role:admin')->group(function () {
+            Route::get('/users', UserList::class)->name('users');
+            Route::get('/users/{user}/stocks', AdminUserStockList::class)->name('users.stocks');
         });
     });
 });

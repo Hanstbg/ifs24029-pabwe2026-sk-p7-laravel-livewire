@@ -1,38 +1,104 @@
-<div class="space-y-4">
-    <a href="/admin/users" class="text-sm text-blue-600 hover:underline">&larr; Kembali</a>
-    <h1 class="text-2xl font-bold">Stok milik {{ $user->name }} <span class="text-sm font-normal text-gray-500">(hanya baca)</span></h1>
+<div>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+            <div class="flex items-center space-x-2">
+                <a href="{{ route('admin.users') }}" class="p-1 rounded-lg text-slate-500 hover:bg-slate-200 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                </a>
+                <h1 class="text-2xl font-bold text-slate-900">Stok Barang Pengguna: {{ $user->name }}</h1>
+            </div>
+            <p class="text-sm text-slate-500 mt-1 ml-7">{{ $user->email }} &bull; Mode Lihat Saja (Read-Only Admin)</p>
+        </div>
 
-    <div class="flex gap-3">
-        <input type="text" wire:model.live.debounce.300ms="search" placeholder="Cari nama / SKU"
-               class="w-64 rounded border border-gray-300 px-3 py-2">
-        <select wire:model.live="statusFilter" class="rounded border border-gray-300 px-3 py-2">
-            <option value="">Semua status</option>
-            @foreach (\App\Features\Stock\Enums\StockStatus::cases() as $s)
-                <option value="{{ $s->value }}">{{ $s->label() }}</option>
-            @endforeach
-        </select>
+        <div>
+            <button wire:click="exportExcel" wire:loading.attr="disabled" class="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-75 text-white text-sm font-semibold rounded-lg shadow-xs transition">
+                <svg wire:loading.remove wire:target="exportExcel" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <svg wire:loading wire:target="exportExcel" class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <span wire:loading.remove wire:target="exportExcel">Export Excel Stok Barang Ini</span>
+                <span wire:loading wire:target="exportExcel">Mengekspor...</span>
+            </button>
+        </div>
     </div>
 
-    <div class="overflow-x-auto rounded bg-white shadow">
-        <table class="min-w-full text-sm">
-            <thead class="bg-gray-50 text-left">
-                <tr><th class="px-4 py-2">Nama</th><th class="px-4 py-2">SKU</th><th class="px-4 py-2">Qty</th><th class="px-4 py-2">Harga</th><th class="px-4 py-2">Status</th></tr>
-            </thead>
-            <tbody>
-            @forelse ($stocks as $stock)
-                <tr class="border-t" wire:key="stock-{{ $stock->id }}">
-                    <td class="px-4 py-2">{{ $stock->name }}</td>
-                    <td class="px-4 py-2">{{ $stock->sku }}</td>
-                    <td class="px-4 py-2">{{ $stock->quantity }} {{ $stock->unit }}</td>
-                    <td class="px-4 py-2">{{ $stock->price !== null ? 'Rp '.number_format((float) $stock->price, 0, ',', '.') : '-' }}</td>
-                    <td class="px-4 py-2"><span class="rounded px-2 py-1 text-xs {{ $stock->status->badgeClass() }}">{{ $stock->status->label() }}</span></td>
-                </tr>
-            @empty
-                <tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">Belum ada stok.</td></tr>
-            @endforelse
-            </tbody>
-        </table>
+    <!-- Filters -->
+    <div class="bg-white p-4 rounded-xl shadow-xs border border-slate-200 mb-6 flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <div class="w-full sm:w-72 relative">
+            <input wire:model.live.debounce.300ms="search" type="text" placeholder="Cari nama, SKU, atau deskripsi..." class="w-full pl-3.5 pr-9 py-2 text-sm rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500">
+            <div wire:loading wire:target="search,statusFilter" class="absolute right-3 top-2.5">
+                <svg class="animate-spin h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3 w-full sm:w-auto">
+            <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status:</label>
+            <select wire:model.live="statusFilter" class="px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white">
+                <option value="">Semua Status</option>
+                @foreach ($statuses as $status)
+                    <option value="{{ $status->value }}">{{ $status->label() }}</option>
+                @endforeach
+            </select>
+        </div>
     </div>
 
-    {{ $stocks->links() }}
+    <!-- Table of user's stocks -->
+    <div class="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <th class="py-3.5 px-6">No</th>
+                        <th class="py-3.5 px-6">Nama Barang</th>
+                        <th class="py-3.5 px-6">SKU</th>
+                        <th class="py-3.5 px-6 text-right">Quantity</th>
+                        <th class="py-3.5 px-6 text-right">Min</th>
+                        <th class="py-3.5 px-6 text-right">Harga</th>
+                        <th class="py-3.5 px-6">Status</th>
+                        <th class="py-3.5 px-6">Diperbarui</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse ($stocks as $index => $stock)
+                        <tr class="hover:bg-slate-50/80 transition">
+                            <td class="py-4 px-6 text-slate-500 text-xs">{{ $stocks->firstItem() + $index }}</td>
+                            <td class="py-4 px-6 font-semibold text-slate-900">
+                                {{ $stock->name }}
+                                @if ($stock->description)
+                                    <span class="block text-xs font-normal text-slate-500 max-w-xs truncate">{{ $stock->description }}</span>
+                                @endif
+                            </td>
+                            <td class="py-4 px-6 font-mono text-xs text-slate-600">{{ $stock->sku ?? '-' }}</td>
+                            <td class="py-4 px-6 text-right font-semibold text-slate-900">{{ $stock->quantity }} <span class="text-xs font-normal text-slate-500">{{ $stock->unit }}</span></td>
+                            <td class="py-4 px-6 text-right text-slate-600">{{ $stock->min_stock }}</td>
+                            <td class="py-4 px-6 text-right text-slate-600 whitespace-nowrap">{{ $stock->price !== null ? 'Rp '.number_format((float) $stock->price, 0, ',', '.') : '-' }}</td>
+                            <td class="py-4 px-6">
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full border whitespace-nowrap {{ $stock->statusEnum()->badgeClass() }}">
+                                    {{ $stock->statusEnum()->label() }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6 text-slate-500 text-xs whitespace-nowrap">{{ $stock->updated_at ? $stock->updated_at->format('d M Y H:i') : '-' }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="8" class="py-12 text-center text-slate-500">
+                                Pengguna ini belum memiliki stok barang.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div class="p-4 border-t border-slate-100">
+            {{ $stocks->links() }}
+        </div>
+    </div>
 </div>
+

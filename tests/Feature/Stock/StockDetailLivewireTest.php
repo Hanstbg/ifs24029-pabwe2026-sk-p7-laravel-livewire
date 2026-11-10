@@ -15,80 +15,205 @@ class StockDetailLivewireTest extends TestCase
 {
     use RefreshDatabase;
 
-    private User $user;
-
-    private Stock $stock;
-
-    protected function setUp(): void
+    public function test_guest_cannot_access_stock_detail(): void
     {
-        parent::setUp();
-        $this->user = User::factory()->create();
-        $this->stock = Stock::factory()->create([
-            'user_id' => $this->user->id, 'name' => 'Item', 'quantity' => 10, 'min_stock' => 5,
-            'description' => '**tebal**', 'sku' => null, 'price' => null,
+        $stock = Stock::factory()->create();
+
+        $this->get(route('stocks.show', $stock->id))->assertRedirect(route('login'));
+    }
+
+    public function test_member_cannot_access_other_member_stock(): void
+    {
+        $owner = User::factory()->member()->create();
+        $otherMember = User::factory()->member()->create();
+        $stock = Stock::factory()->create(['user_id' => $owner->id]);
+
+        $this->actingAs($otherMember)
+            ->get(route('stocks.show', $stock->id))
+            ->assertStatus(403);
+    }
+
+    public function test_member_can_view_own_stock_detail(): void
+    {
+        $user = User::factory()->member()->create();
+        $stock = Stock::factory()->create([
+            'user_id' => $user->id,
+            'name' => 'Kertas HVS A4',
+            'sku' => 'ATK-001',
+            'description' => '# Deskripsi Markdown',
+            'quantity' => 40,
+            'unit' => 'rim',
+            'price' => 55000,
+            'min_stock' => 10,
+            'status' => 'available',
         ]);
-        $this->actingAs($this->user);
+
+        $this->actingAs($user)
+            ->get(route('stocks.show', $stock->id))
+            ->assertOk()
+            ->assertSee('Kertas HVS A4')
+            ->assertSee('SKU: ATK-001')
+            ->assertSee('Rp 2.200.000')
+            ->assertSee('Sesuaikan Quantity');
+
+        Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->assertSet('name', 'Kertas HVS A4')
+            ->assertSet('sku', 'ATK-001')
+            ->assertSet('quantity', 40)
+            ->assertSet('unit', 'rim')
+            ->assertSet('minStock', 10);
     }
 
-    public function test_renders_detail_with_markdown(): void
+    public function test_admin_sees_detail_read_only(): void
     {
-        Livewire::test(StockDetail::class, ['stock' => $this->stock])
-            ->assertSee('Item')->assertSeeHtml('<strong>tebal</strong>');
+        $admin = User::factory()->admin()->create();
+        $stock = Stock::factory()->create(['name' => 'Barang Member', 'price' => null, 'description' => null]);
+
+        $this->actingAs($admin)
+            ->get(route('stocks.show', $stock->id))
+            ->assertOk()
+            ->assertSee('Barang Member')
+            ->assertSee('Tidak ditentukan')
+            ->assertDontSee('Sesuaikan Quantity')
+            ->assertDontSee('Edit Barang');
+
+        Livewire::test(StockDetail::class, ['stock' => $stock])->call('openEditModal')->assertForbidden();
+        Livewire::test(StockDetail::class, ['stock' => $stock])->call('adjustQuantity', 1)->assertForbidden();
     }
 
-    public function test_other_user_cannot_view(): void
+    public function test_open_and_close_edit_modal(): void
     {
-        $this->actingAs(User::factory()->create());
+        $user = User::factory()->member()->create();
+        $stock = Stock::factory()->create(['user_id' => $user->id, 'name' => 'Judul Detail', 'description' => null]);
+        $this->actingAs($user);
 
-        Livewire::test(StockDetail::class, ['stock' => $this->stock])->assertForbidden();
+        Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->set('name', 'Diubah sementara')
+            ->call('openEditModal')
+            ->assertSet('showEditModal', true)
+            ->assertSet('name', 'Judul Detail')
+            ->assertSet('description', '')
+            ->assertSee('Ubah Data Barang')
+            ->call('closeEditModal')
+            ->assertSet('showEditModal', false);
     }
 
-    public function test_save(): void
+    public function test_update_stock_validation_and_success(): void
     {
-        Livewire::test(StockDetail::class, ['stock' => $this->stock])
-            ->set('name', 'Diubah')->set('quantity', 2)->set('price', '')->set('sku', '')
-            ->call('save')->assertSet('message', 'Stok berhasil disimpan.');
+        $user = User::factory()->member()->create();
+        $stock = Stock::factory()->create(['user_id' => $user->id, 'name' => 'Awal', 'quantity' => 20, 'min_stock' => 5]);
+        $this->actingAs($user);
 
-        $this->assertDatabaseHas('stocks', ['id' => $this->stock->id, 'name' => 'Diubah', 'status' => 'low_stock']);
+        Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->call('openEditModal')
+            ->set('name', 'A')
+            ->set('quantity', -2)
+            ->set('unit', '')
+            ->set('price', -1)
+            ->set('minStock', -1)
+            ->call('saveStock')
+            ->assertHasErrors(['name', 'quantity', 'unit', 'price', 'minStock']);
+
+        Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->call('openEditModal')
+            ->set('name', 'Nama Diperbarui')
+            ->set('sku', 'NEW-1')
+            ->set('description', '## Spesifikasi')
+            ->set('quantity', 4)
+            ->set('unit', 'box')
+            ->set('price', '')
+            ->set('minStock', 5)
+            ->call('saveStock')
+            ->assertHasNoErrors()
+            ->assertSet('showEditModal', false);
+
+        $stock->refresh();
+        $this->assertSame('Nama Diperbarui', $stock->name);
+        $this->assertSame('NEW-1', $stock->sku);
+        $this->assertSame(4, $stock->quantity);
+        $this->assertNull($stock->price);
+        $this->assertSame('low_stock', $stock->status);
     }
 
-    public function test_save_validation(): void
+    public function test_adjust_quantity(): void
     {
-        Livewire::test(StockDetail::class, ['stock' => $this->stock])->set('name', '')->call('save')->assertHasErrors('name');
+        $user = User::factory()->member()->create();
+        $stock = Stock::factory()->create(['user_id' => $user->id, 'quantity' => 10, 'min_stock' => 5]);
+        $this->actingAs($user);
+
+        $component = Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->set('adjustAmount', 0)
+            ->call('adjustQuantity', 1)
+            ->assertHasErrors(['adjustAmount'])
+            ->set('adjustAmount', 7)
+            ->call('adjustQuantity', -1)
+            ->assertSet('quantity', 3);
+
+        $this->assertSame('low_stock', $stock->fresh()->status);
+
+        $component->set('adjustAmount', 10)->call('adjustQuantity', -1)->assertSet('quantity', 0);
+        $this->assertSame('out_of_stock', $stock->fresh()->status);
+
+        $component->set('adjustAmount', 20)->call('adjustQuantity', 1)->assertSet('quantity', 20);
+        $this->assertSame('available', $stock->fresh()->status);
     }
 
-    public function test_adjust(): void
-    {
-        Livewire::test(StockDetail::class, ['stock' => $this->stock])->call('adjust', 1)->assertSet('quantity', 11);
-    }
-
-    public function test_upload_cover_and_replace(): void
+    public function test_cover_photo_upload_and_delete(): void
     {
         Storage::fake('public');
+        $user = User::factory()->member()->create();
+        $stock = Stock::factory()->create(['user_id' => $user->id]);
+        $this->actingAs($user);
 
-        $component = Livewire::test(StockDetail::class, ['stock' => $this->stock])
-            ->set('cover', UploadedFile::fake()->image('a.jpg'))->call('uploadCover');
-        $first = $this->stock->fresh()->cover_image_path;
-        Storage::disk('public')->assertExists($first);
+        $component = Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->set('coverPhoto', UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf'))
+            ->assertHasErrors(['coverPhoto'])
+            ->set('coverPhoto', UploadedFile::fake()->image('cover.jpg'))
+            ->assertHasNoErrors();
 
-        $component->set('cover', UploadedFile::fake()->image('b.jpg'))->call('uploadCover');
-        Storage::disk('public')->assertMissing($first);
-    }
+        $stock->refresh();
+        $this->assertNotNull($stock->cover_image_path);
+        Storage::disk('public')->assertExists($stock->cover_image_path);
+        $path = $stock->cover_image_path;
 
-    public function test_cover_validation(): void
-    {
-        Livewire::test(StockDetail::class, ['stock' => $this->stock])->call('uploadCover')->assertHasErrors('cover');
-    }
+        $component->assertSee('Ganti Cover')
+            ->call('confirmDeleteCover')
+            ->assertSet('confirmingCoverDeletion', true)
+            ->call('cancelDeleteCover')
+            ->assertSet('confirmingCoverDeletion', false)
+            ->call('confirmDeleteCover')
+            ->assertSee('Konfirmasi Hapus Cover')
+            ->call('deleteCoverPhoto')
+            ->assertSet('confirmingCoverDeletion', false);
 
-    public function test_delete_removes_cover(): void
-    {
-        Storage::fake('public');
-        $path = UploadedFile::fake()->image('c.jpg')->store('covers', 'public');
-        $this->stock->update(['cover_image_path' => $path]);
-
-        Livewire::test(StockDetail::class, ['stock' => $this->stock->fresh()])->call('delete')->assertRedirect('/stocks');
-
-        $this->assertDatabaseMissing('stocks', ['id' => $this->stock->id]);
         Storage::disk('public')->assertMissing($path);
+        $this->assertNull($stock->fresh()->cover_image_path);
+    }
+
+    public function test_delete_stock_redirects(): void
+    {
+        $user = User::factory()->member()->create();
+        $stock = Stock::factory()->create(['user_id' => $user->id]);
+        $this->actingAs($user);
+
+        Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->call('deleteStock')
+            ->assertRedirect(route('stocks.index'));
+
+        $this->assertDatabaseMissing('stocks', ['id' => $stock->id]);
+    }
+
+    public function test_confirm_and_cancel_delete_modal_actions(): void
+    {
+        $user = User::factory()->member()->create();
+        $stock = Stock::factory()->create(['user_id' => $user->id]);
+        $this->actingAs($user);
+
+        Livewire::test(StockDetail::class, ['stock' => $stock])
+            ->call('confirmDeleteStock')
+            ->assertSet('confirmingStockDeletion', true)
+            ->assertSee('Konfirmasi Hapus Barang')
+            ->call('cancelDeleteStock')
+            ->assertSet('confirmingStockDeletion', false);
     }
 }

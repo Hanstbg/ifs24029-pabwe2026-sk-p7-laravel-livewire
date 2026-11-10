@@ -1,0 +1,44 @@
+{
+  "node_modules/@toast-ui/editor/dist/esm/index.js": {
+    "file": "assets/esm-CBRa3fWC.js",
+    "name": "esm",
+    "src": "node_modules/@toast-ui/editor/dist/esm/index.js",
+    "isDynamicEntry": true
+  },
+  "node_modules/@toast-ui/editor/dist/toastui-editor.css": {
+    "file": "assets/toastui-editor-QX1IWxP3.css",
+    "src": "node_modules/@toast-ui/editor/dist/toastui-editor.css"
+  },
+  "node_modules/cropperjs/dist/cropper.css": {
+    "file": "assets/cropper-cx_wrqbx.css",
+    "src": "node_modules/cropperjs/dist/cropper.css"
+  },
+  "node_modules/cropperjs/dist/cropper.js": {
+    "file": "assets/cropper-Do_ETa2O.js",
+    "name": "cropper",
+    "src": "node_modules/cropperjs/dist/cropper.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "resources/css/app.css": {
+    "file": "assets/app-BTvE4K3V.css",
+    "name": "app",
+    "names": [
+      "app.css"
+    ],
+    "src": "resources/css/app.css",
+    "isEntry": true
+  },
+  "resources/js/app.js": {
+    "file": "assets/app-B6jCofC0.js",
+    "name": "app",
+    "src": "resources/js/app.js",
+    "isEntry": true,
+    "dynamicImports": [
+      "node_modules/@toast-ui/editor/dist/esm/index.js",
+      "node_modules/cropperjs/dist/cropper.js"
+    ]
+  }
+}

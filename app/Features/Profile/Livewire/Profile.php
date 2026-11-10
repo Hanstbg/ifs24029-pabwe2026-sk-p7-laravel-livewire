@@ -3,6 +3,9 @@
 namespace App\Features\Profile\Livewire;
 
 use App\Features\Profile\Services\ProfileService;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -10,77 +13,135 @@ use Livewire\Component;
 use Livewire\WithFileUploads;
 
 #[Layout('components.layouts.app')]
-#[Title('Profil')]
+#[Title('Profil Saya - StockApp')]
 class Profile extends Component
 {
     use WithFileUploads;
 
+    // Profile Information
     public string $name = '';
-
     public string $username = '';
-
     public string $email = '';
 
+    // Password Update
     public string $current_password = '';
+    public string $password = '';
+    public string $password_confirmation = '';
 
-    public string $new_password = '';
-
-    public string $new_password_confirmation = '';
-
-    public $photo = null;
-
-    public ?string $message = null;
+    // Photo Crop State
+    public mixed $photo = null;
+    public string $croppedPhoto = '';
+    public bool $showCropModal = false;
+    public bool $confirmingPhotoDeletion = false;
 
     public function mount(): void
     {
-        $user = auth()->user();
-        $this->name = $user->name;
-        $this->username = $user->username;
-        $this->email = $user->email;
+        $user = Auth::user();
+        if ($user) {
+            $this->name = $user->name;
+            $this->username = $user->username;
+            $this->email = $user->email;
+        }
     }
 
-    public function saveProfile(ProfileService $service): void
-    {
-        $user = auth()->user();
-
-        $data = $this->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:50', 'alpha_dash', Rule::unique('users', 'username')->ignore($user->id)],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-        ]);
-
-        $service->updateProfile($user, $data);
-        $this->message = 'Profil berhasil diperbarui.';
-    }
-
-    public function savePassword(ProfileService $service): void
+    public function updatedPhoto(): void
     {
         $this->validate([
-            'current_password' => ['required', 'string'],
-            'new_password' => ['required', 'string', 'min:4', 'confirmed'],
+            'photo' => ['image', 'max:5120'], // 5MB
         ]);
 
-        if (! $service->updatePassword(auth()->user(), $this->current_password, $this->new_password)) {
-            $this->addError('current_password', 'Password saat ini salah.');
+        $this->showCropModal = true;
+    }
 
+    public function closeCropModal(): void
+    {
+        $this->showCropModal = false;
+        $this->photo = null;
+        $this->croppedPhoto = '';
+    }
+
+    public function updateProfileInformation(ProfileService $service): void
+    {
+        $user = Auth::user();
+
+        $this->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'username' => ['required', 'string', 'alpha_dash', 'min:3', 'max:50', Rule::unique('users')->ignore($user->id)],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
+        ]);
+
+        $service->updateProfile($user, [
+            'name' => $this->name,
+            'username' => $this->username,
+            'email' => $this->email,
+        ]);
+
+        session()->flash('success', 'Identitas profil berhasil diperbarui.');
+    }
+
+    public function updatePassword(ProfileService $service): void
+    {
+        $user = Auth::user();
+
+        $this->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        if (!Hash::check($this->current_password, $user->password)) {
+            $this->addError('current_password', 'Password saat ini yang Anda masukkan salah.');
             return;
         }
 
-        $this->reset(['current_password', 'new_password', 'new_password_confirmation']);
-        $this->message = 'Password berhasil diubah.';
+        $service->updatePassword($user, $this->password);
+        $this->reset(['current_password', 'password', 'password_confirmation']);
+
+        session()->flash('success', 'Password akun berhasil diubah.');
     }
 
-    public function savePhoto(ProfileService $service): void
+    public function saveCroppedPhoto(ProfileService $service): void
     {
-        $this->validate(['photo' => ['required', 'image', 'max:2048']]);
+        if (empty($this->croppedPhoto)) {
+            // Fallback: if user didn't crop client-side, use uploaded photo directly
+            if ($this->photo) {
+                $this->croppedPhoto = $this->photo->getRealPath();
+            } else {
+                $this->addError('photo', 'Pilih foto profil terlebih dahulu.');
+                return;
+            }
+        }
 
-        $service->updatePhoto(auth()->user(), $this->photo);
-        $this->photo = null;
-        $this->message = 'Foto berhasil diperbarui.';
+        $user = Auth::user();
+        $service->updateProfilePhoto($user, $this->croppedPhoto);
+
+        $this->closeCropModal();
+        session()->flash('success', 'Foto profil (rasio 1:1) berhasil disimpan.');
     }
 
-    public function render()
+    public function confirmDeletePhoto(): void
     {
-        return view('livewire.profile.profile');
+        $this->confirmingPhotoDeletion = true;
+    }
+
+    public function cancelDeletePhoto(): void
+    {
+        $this->confirmingPhotoDeletion = false;
+    }
+
+    public function deletePhoto(ProfileService $service): void
+    {
+        $user = Auth::user();
+        $service->deleteProfilePhoto($user);
+        $this->confirmingPhotoDeletion = false;
+
+        session()->flash('success', 'Foto profil berhasil dihapus.');
+    }
+
+    public function render(): View
+    {
+        return view('livewire.profile.profile', [
+            'user' => Auth::user(),
+        ]);
     }
 }
+

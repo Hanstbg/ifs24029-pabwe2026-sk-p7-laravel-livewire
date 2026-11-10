@@ -3,23 +3,23 @@
 namespace App\Features\Auth\Actions;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 class RegisterUserAction
 {
-    /** @param array{name: string, username: string, email: string, password: string} $data */
+    /**
+     * Execute the user registration action.
+     *
+     * @param array{name: string, username: string, email: string, password: string, role?: string} $data
+     */
     public function execute(array $data): User
     {
-        $user = User::create([
+        return User::create([
             'name' => $data['name'],
             'username' => $data['username'],
             'email' => $data['email'],
-            'password' => $data['password'],
-            'role' => 'member',
+            'password' => Hash::make($data['password']),
+            'role' => $data['role'] ?? 'member',
         ]);
-
-        Auth::login($user);
-
-        return $user;
     }
 }
