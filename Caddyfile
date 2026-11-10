@@ -5,7 +5,7 @@
 	admin off
 }
 
-:{$PORT:80} {
+http://:{$PORT:80} {
 	root * /app/public
 	encode zstd gzip
 	php_server
