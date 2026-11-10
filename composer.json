@@ -47,7 +47,8 @@
             "@php artisan dev"
         ],
         "test": [
-            "@php vendor/bin/phpunit --coverage-text"
+            "@php artisan config:clear --ansi",
+            "@php artisan test"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

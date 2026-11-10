@@ -1,73 +1,58 @@
-# ifs24003 - PABWE 2026 Studi Kasus P7: Aplikasi Stock Barang
+<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
-Aplikasi **inventaris stok barang** dengan arsitektur **Clean Architecture & Feature-First**, dibangun menggunakan **Laravel 13**, **Livewire 4**, **MySQL**, **PhpOffice/PhpSpreadsheet**, dan integrasi **OpenAI**. Pola mengikuti latihan Todolist; domain `Todo` diganti menjadi `Stock`.
+<p align="center">
+<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+</p>
 
-## Fitur
+## About Laravel
 
-| Peran | Kemampuan |
-|---|---|
-| **Guest** | Login (username/email) & register. Root `/` diarahkan ke login. |
-| **Member** | Mengelola **stok miliknya sendiri**: daftar (cari nama/SKU/deskripsi, filter status, pagination), CRUD via modal, **adjust quantity (+/−)** dari list maupun detail, cover image, deskripsi Markdown (Toast UI), import/export Excel, generate item stok dengan AI, profil. |
-| **Admin** | `/admin/users` (daftar user + jumlah barang) dan `/admin/users/{user}/stocks` (stok user, **read-only** + export). |
+Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
-**Status otomatis.** Status tidak dipilih manual, tetapi dihitung dari `quantity` vs `min_stock` setiap kali barang dibuat, diubah, di-import, atau di-adjust:
+- [Simple, fast routing engine](https://laravel.com/docs/routing).
+- [Powerful dependency injection container](https://laravel.com/docs/container).
+- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
+- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
+- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
+- [Robust background job processing](https://laravel.com/docs/queues).
+- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
 
-- `quantity = 0` → `out_of_stock` (Habis, merah)
-- `0 < quantity ≤ min_stock` → `low_stock` (Stok Menipis, kuning)
-- `quantity > min_stock` → `available` (Tersedia, hijau)
+Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
-Quantity tidak pernah bisa turun di bawah 0.
+## Learning Laravel
 
-## Struktur (Feature-First)
+Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
 
-```
-app/Features/
-├── Admin/   Livewire/{AdminUserStockList,UserList}.php, Services/AdminUserService.php
-├── Ai/      Contracts/AiClientInterface.php, DTO/GeneratedStockItem.php, Services/OpenAiStockGeneratorService.php
-├── Auth/    Actions/{LoginUserAction,RegisterUserAction}.php, Livewire/{Login,Register}.php
-├── Profile/ Livewire/Profile.php, Services/ProfileService.php
-└── Stock/   Contracts/StockRepositoryInterface.php, Enums/StockStatus.php,
-             Livewire/{StockList,StockDetail}.php, Models/Stock.php, Policies/StockPolicy.php,
-             Repositories/StockRepository.php, Services/{StockService,StockExcelService}.php
-app/Http/Middleware/{EnsureRole,EnsureStockOwnership}.php   # alias: role, owns.stock
-```
+In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
 
-## Format Excel
+You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
 
-Export dan import memakai kolom yang sama (baris 1 = header):
+## Agentic Development
 
-`No | Name | SKU | Description | Quantity | Unit | Price | Min Stock | Status | Created At`
-
-Saat import, kolom `Status` diabaikan (dihitung ulang). Baris tanpa nama dilewati; baris dengan quantity tidak valid/negatif dilewati dan dilaporkan. Quantity kosong dianggap 0, unit kosong → `pcs`, min stock kosong → `5`.
-
-## Instalasi
+Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
 
 ```bash
-composer install
-cp .env.example .env
-php artisan key:generate
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS pabwe_p7_stock CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-# sesuaikan DB_*, FORCE_HTTPS, OPENAI_ENDPOINT, OPENAI_KEY, OPENAI_MODEL di .env
-php artisan migrate:fresh --seed
-php artisan storage:link
-npm install --ignore-scripts
-npm run build
-php artisan serve
+composer require laravel/boost --dev
+
+php artisan boost:install
 ```
 
-Akun seeder: **admin / admin** dan **member / member** (member sudah punya 3 contoh barang: tersedia, menipis, habis).
+Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
 
-## Pengujian
+## Contributing
 
-```bash
-composer test     # PHPUnit + coverage (target 100% folder app/)
-composer audit
-```
+Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
 
-Hasil: `OK (119 tests, 477 assertions)` tanpa PHPUnit notice, coverage **Classes/Methods/Lines 100%**. Mock AI memakai `createStub()`.
+## Code of Conduct
 
-ID form login untuk selektor uji: `login-username`, `login-password`, `login-submit`.
+In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
 
-## CI/CD
+## Security Vulnerabilities
 
-`Jenkinsfile`: composer install → `composer audit` (gagal jika ada kerentanan) → npm build → PHPUnit dengan gate coverage 100% → Trivy → zip tanpa `vendor/` & `node_modules/`.
+If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+
+## License
+
+The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

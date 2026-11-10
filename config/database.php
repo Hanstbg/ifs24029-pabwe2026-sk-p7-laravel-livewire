@@ -60,8 +60,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                // Path relatif (mis. database/certs/isrgrootx1.pem) di-resolve dari root proyek.
-                Mysql::ATTR_SSL_CA => ($ca = env('MYSQL_ATTR_SSL_CA')) && ! is_file($ca) ? base_path($ca) : $ca,
+                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 
@@ -81,8 +80,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                // Path relatif (mis. database/certs/isrgrootx1.pem) di-resolve dari root proyek.
-                Mysql::ATTR_SSL_CA => ($ca = env('MYSQL_ATTR_SSL_CA')) && ! is_file($ca) ? base_path($ca) : $ca,
+                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 

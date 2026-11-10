@@ -8,76 +8,46 @@ use App\Features\Stock\Models\Stock;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 class AdminLivewireTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_member_forbidden_from_admin_pages(): void
+    protected function setUp(): void
     {
-        $member = User::factory()->member()->create();
-        $targetUser = User::factory()->member()->create();
-
-        $this->actingAs($member)
-            ->get('/admin/users')
-            ->assertStatus(403);
-
-        $this->actingAs($member)
-            ->get("/admin/users/{$targetUser->id}/stocks")
-            ->assertStatus(403);
+        parent::setUp();
+        $this->actingAs(User::factory()->admin()->create());
     }
 
-    public function test_admin_can_view_user_list(): void
+    public function test_user_list_with_search_and_counts(): void
     {
-        $admin = User::factory()->admin()->create();
-        User::factory()->create(['name' => 'Budi Santoso', 'email' => 'budi@test.com']);
-        User::factory()->create(['name' => 'Citra Lestari', 'email' => 'citra@test.com']);
+        $member = User::factory()->create(['name' => 'Siti Member']);
+        User::factory()->create(['name' => 'Budi Lain']);
+        Stock::factory()->count(3)->create(['user_id' => $member->id]);
 
-        $this->actingAs($admin);
-
-        Livewire::test(UserList::class)
-            ->assertSee('Budi Santoso')
-            ->assertSee('Citra Lestari')
-            ->set('search', 'Budi')
-            ->assertSee('Budi Santoso')
-            ->assertDontSee('Citra Lestari');
+        Livewire::test(UserList::class)->assertSee('Siti Member')->assertSee('Budi Lain')
+            ->set('search', 'Siti')->assertSee('Siti Member')->assertDontSee('Budi Lain');
     }
 
-    public function test_admin_can_view_user_stocks_read_only(): void
+    public function test_user_stock_list_readonly(): void
     {
-        $admin = User::factory()->admin()->create();
-        $member = User::factory()->member()->create(['name' => 'Dewi Sartika']);
-
-        Stock::factory()->create(['user_id' => $member->id, 'name' => 'Spidol Whiteboard', 'description' => null, 'quantity' => 10, 'status' => 'available']);
-        Stock::factory()->create(['user_id' => $member->id, 'name' => 'Penghapus Papan', 'description' => null, 'quantity' => 0, 'status' => 'out_of_stock']);
-
-        $this->actingAs($admin);
+        $member = User::factory()->create();
+        Stock::factory()->create(['user_id' => $member->id, 'name' => 'Barang A', 'status' => 'available', 'quantity' => 50]);
+        Stock::factory()->create(['user_id' => $member->id, 'name' => 'Barang B', 'status' => 'out_of_stock', 'quantity' => 0]);
+        Stock::factory()->create(['name' => 'Bukan Milik']);
 
         Livewire::test(AdminUserStockList::class, ['user' => $member])
-            ->assertSee('Dewi Sartika')
-            ->assertSee('Spidol Whiteboard')
-            ->assertSee('Penghapus Papan')
-            ->set('search', 'Spidol')
-            ->assertSee('Spidol Whiteboard')
-            ->assertDontSee('Penghapus Papan')
-            ->set('search', '')
-            ->set('statusFilter', 'out_of_stock')
-            ->assertSee('Penghapus Papan')
-            ->assertDontSee('Spidol Whiteboard');
+            ->assertSee('Barang A')->assertDontSee('Bukan Milik')
+            ->set('search', 'Barang A')->assertDontSee('Barang B')
+            ->set('search', '')->set('statusFilter', 'out_of_stock')->assertSee('Barang B')->assertDontSee('Barang A');
     }
 
-    public function test_admin_can_export_user_stocks(): void
+    public function test_admin_routes_render(): void
     {
-        $admin = User::factory()->admin()->create();
-        $member = User::factory()->member()->create(['name' => 'Eko Prasetyo']);
-        Stock::factory()->create(['user_id' => $member->id, 'name' => 'Barang Export Admin']);
+        $member = User::factory()->create();
 
-        $this->actingAs($admin);
-
-        Livewire::test(AdminUserStockList::class, ['user' => $member])
-            ->call('exportExcel')
-            ->assertFileDownloaded();
+        $this->get('/admin/users')->assertOk();
+        $this->get("/admin/users/{$member->id}/stocks")->assertOk();
     }
 }

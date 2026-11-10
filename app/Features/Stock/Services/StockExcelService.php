@@ -2,175 +2,65 @@
 
 namespace App\Features\Stock\Services;
 
-use App\Features\Stock\Contracts\StockRepositoryInterface;
-use App\Features\Stock\Enums\StockStatus;
-use App\Features\Stock\Models\Stock;
-use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StockExcelService
 {
-    /**
-     * Column headers used for export (and expected for import).
-     *
-     * @var array<int, string>
-     */
-    public const HEADERS = ['No', 'Name', 'SKU', 'Description', 'Quantity', 'Unit', 'Price', 'Min Stock', 'Status', 'Created At'];
+    public const HEADERS = ['name', 'sku', 'qty', 'unit', 'price', 'min_stock', 'status'];
 
-    public function __construct(
-        protected StockRepositoryInterface $stockRepository
-    ) {}
-
-    /**
-     * Build a Spreadsheet instance containing stock data.
-     *
-     * @param Collection<int, Stock> $stocks
-     */
-    public function buildSpreadsheet(Collection $stocks, string $sheetTitle = 'Stocks'): Spreadsheet
+    public function export(Collection $stocks): string
     {
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle(substr($sheetTitle, 0, 31));
+        $sheet->fromArray(self::HEADERS, null, 'A1');
 
-        $columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-
-        foreach (self::HEADERS as $index => $header) {
-            $sheet->setCellValue("{$columns[$index]}1", $header);
+        $row = 2;
+        foreach ($stocks as $stock) {
+            $sheet->fromArray([
+                $stock->name,
+                $stock->sku,
+                $stock->quantity,
+                $stock->unit,
+                $stock->price,
+                $stock->min_stock,
+                $stock->status->value,
+            ], null, 'A'.$row);
+            $row++;
         }
 
-        $headerRange = 'A1:J1';
-        $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
-        $sheet->getStyle($headerRange)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
-        $sheet->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $tmp = tempnam(sys_get_temp_dir(), 'stk');
+        (new Xlsx($spreadsheet))->save($tmp);
+        $content = (string) file_get_contents($tmp);
+        unlink($tmp);
 
-        $rowNumber = 2;
-        foreach ($stocks as $idx => $stock) {
-            $sheet->setCellValue("A{$rowNumber}", $idx + 1);
-            $sheet->setCellValue("B{$rowNumber}", $stock->name);
-            $sheet->setCellValue("C{$rowNumber}", $stock->sku ?? '-');
-            $sheet->setCellValue("D{$rowNumber}", $stock->description ?? '-');
-            $sheet->setCellValue("E{$rowNumber}", (int) $stock->quantity);
-            $sheet->setCellValue("F{$rowNumber}", $stock->unit);
-            $sheet->setCellValue("G{$rowNumber}", $stock->price !== null ? (float) $stock->price : '-');
-            $sheet->setCellValue("H{$rowNumber}", (int) $stock->min_stock);
-            $sheet->setCellValue("I{$rowNumber}", $stock->status);
-            $sheet->setCellValue("J{$rowNumber}", $stock->created_at ? $stock->created_at->format('Y-m-d H:i') : '-');
-            $rowNumber++;
-        }
-
-        $lastRow = max(2, $rowNumber - 1);
-        $sheet->getStyle("A1:J{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-
-        foreach ($columns as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
-
-        return $spreadsheet;
+        return $content;
     }
 
-    /**
-     * Export stocks as a downloadable streamed response.
-     *
-     * @param Collection<int, Stock> $stocks
-     */
-    public function exportToResponse(Collection $stocks, string $filename = 'stocks.xlsx'): StreamedResponse
+    /** @return array<int, array<string, mixed>> */
+    public function parse(string $path): array
     {
-        $spreadsheet = $this->buildSpreadsheet($stocks);
+        $rows = IOFactory::load($path)->getActiveSheet()->toArray(null, true, true, false);
+        array_shift($rows);
 
-        return response()->streamDownload(function () use ($spreadsheet) {
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-        }, $filename, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Cache-Control' => 'max-age=0',
-        ]);
-    }
-
-    /**
-     * Import stocks from a spreadsheet file path.
-     * Expected columns: No | Name | SKU | Description | Quantity | Unit | Price | Min Stock | (Status ignored, re-derived).
-     *
-     * @return array{imported: int, errors: array<int, string>}
-     */
-    public function import(string $filePath, int $userId): array
-    {
-        $spreadsheet = IOFactory::load($filePath);
-        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, false, true);
-
-        $imported = 0;
-        $errors = [];
-        $records = [];
-        $now = Carbon::now();
-
-        foreach (array_slice($rows, 1, null, true) as $rowIndex => $row) {
-            $name = trim((string) ($row['B'] ?? ''));
-
-            if ($name === '' || strtolower($name) === 'name') {
+        $result = [];
+        foreach ($rows as $row) {
+            if (trim((string) ($row[0] ?? '')) === '') {
                 continue;
             }
 
-            $rawQuantity = $this->clean($row['E'] ?? null);
-            $quantity = $rawQuantity === null ? 0 : $this->toInt($rawQuantity);
-            if ($quantity === null || $quantity < 0) {
-                $errors[] = "Baris {$rowIndex}: quantity tidak valid, baris dilewati.";
-                continue;
-            }
-
-            $minStock = $this->toInt($row['H'] ?? null) ?? 5;
-            $minStock = max(0, $minStock);
-            $price = $this->toFloat($row['G'] ?? null);
-            $unit = $this->clean($row['F'] ?? null) ?? 'pcs';
-
-            $records[] = [
-                'user_id' => $userId,
-                'name' => mb_substr($name, 0, 255),
-                'sku' => $this->clean($row['C'] ?? null),
-                'description' => $this->clean($row['D'] ?? null),
-                'quantity' => $quantity,
-                'unit' => mb_substr($unit, 0, 30),
-                'price' => $price,
-                'min_stock' => $minStock,
-                'status' => StockStatus::fromQuantity($quantity, $minStock)->value,
-                'created_at' => $now,
-                'updated_at' => $now,
+            $result[] = [
+                'name' => (string) $row[0],
+                'sku' => ($row[1] ?? '') !== '' ? (string) $row[1] : null,
+                'quantity' => (int) ($row[2] ?? 0),
+                'unit' => ($row[3] ?? '') !== '' ? (string) $row[3] : 'pcs',
+                'price' => ($row[4] ?? '') !== '' ? $row[4] : null,
+                'min_stock' => ($row[5] ?? '') !== '' ? (int) $row[5] : 5,
             ];
-
-            $imported++;
         }
 
-        $this->stockRepository->insertMany($records);
-
-        return [
-            'imported' => $imported,
-            'errors' => $errors,
-        ];
-    }
-
-    private function clean(mixed $value): ?string
-    {
-        $value = trim((string) ($value ?? ''));
-
-        return ($value === '' || $value === '-') ? null : $value;
-    }
-
-    private function toInt(mixed $value): ?int
-    {
-        $value = $this->clean($value);
-
-        return ($value !== null && is_numeric($value)) ? (int) $value : null;
-    }
-
-    private function toFloat(mixed $value): ?float
-    {
-        $value = $this->clean($value);
-
-        return ($value !== null && is_numeric($value)) ? (float) $value : null;
+        return $result;
     }
 }

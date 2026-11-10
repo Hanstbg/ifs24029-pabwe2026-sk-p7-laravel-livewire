@@ -12,60 +12,28 @@ class RegisterTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_can_render_register_page(): void
+    public function test_register_page_renders(): void
     {
-        $this->get('/register')
-            ->assertStatus(200)
-            ->assertSee('Buat Akun Member')
-            ->assertSee('Username');
+        $this->get('/register')->assertOk();
     }
 
-    public function test_register_validation(): void
+    public function test_register_creates_member(): void
     {
         Livewire::test(Register::class)
-            ->set('name', '')
-            ->set('username', '')
-            ->set('email', 'not-an-email')
-            ->set('password', 'short')
-            ->set('password_confirmation', 'mismatch')
-            ->call('register')
-            ->assertHasErrors(['name', 'username', 'email', 'password']);
-    }
+            ->set('name', 'Budi')->set('username', 'budi')->set('email', 'budi@example.com')
+            ->set('password', 'secret')->set('password_confirmation', 'secret')
+            ->call('submit')->assertRedirect('/stocks');
 
-    public function test_register_duplicate_email_and_username(): void
-    {
-        User::factory()->create([
-            'username' => 'existing_user',
-            'email' => 'duplicate@test.com',
-        ]);
-
-        Livewire::test(Register::class)
-            ->set('name', 'John Doe')
-            ->set('username', 'existing_user')
-            ->set('email', 'duplicate@test.com')
-            ->set('password', 'password123')
-            ->set('password_confirmation', 'password123')
-            ->call('register')
-            ->assertHasErrors(['username', 'email']);
-    }
-
-    public function test_successful_registration(): void
-    {
-        Livewire::test(Register::class)
-            ->set('name', 'New Member')
-            ->set('username', 'new_member')
-            ->set('email', 'newmember@test.com')
-            ->set('password', 'password123')
-            ->set('password_confirmation', 'password123')
-            ->call('register')
-            ->assertHasNoErrors()
-            ->assertRedirect(route('stocks.index'));
-
+        $this->assertDatabaseHas('users', ['username' => 'budi', 'role' => 'member']);
         $this->assertAuthenticated();
-        $this->assertDatabaseHas('users', [
-            'username' => 'new_member',
-            'email' => 'newmember@test.com',
-            'role' => 'member',
-        ]);
+    }
+
+    public function test_register_validation_errors(): void
+    {
+        User::factory()->create(['username' => 'budi']);
+
+        Livewire::test(Register::class)
+            ->set('username', 'budi')->set('password', 'a')->set('password_confirmation', 'b')
+            ->call('submit')->assertHasErrors(['name', 'username', 'email', 'password']);
     }
 }

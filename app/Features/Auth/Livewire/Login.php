@@ -3,49 +3,39 @@
 namespace App\Features\Auth\Livewire;
 
 use App\Features\Auth\Actions\LoginUserAction;
-use Illuminate\Contracts\View\View;
-use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Layout('components.layouts.app')]
-#[Title('Login - StockApp')]
+#[Title('Masuk')]
 class Login extends Component
 {
     public string $login = '';
+
     public string $password = '';
+
     public bool $remember = false;
 
-    /**
-     * @return array<string, array<int, string>>
-     */
-    protected function rules(): array
+    public function submit(LoginUserAction $action)
     {
-        return [
+        $this->validate([
             'login' => ['required', 'string'],
             'password' => ['required', 'string'],
-        ];
-    }
+        ]);
 
-    public function authenticate(LoginUserAction $action): mixed
-    {
-        $this->validate();
+        if (! $action->execute($this->login, $this->password, $this->remember)) {
+            $this->addError('login', 'Username/email atau password salah.');
 
-        if ($action->execute($this->login, $this->password, $this->remember)) {
-            $user = Auth::user();
-            if ($user && $user->isAdmin()) {
-                return $this->redirectRoute('admin.users', navigate: true);
-            }
-
-            return $this->redirectRoute('stocks.index', navigate: true);
+            return null;
         }
 
-        $this->addError('login', 'Username/email atau password yang Anda masukkan tidak sesuai.');
-        return null;
+        session()->regenerate();
+
+        return $this->redirect(auth()->user()->isAdmin() ? '/admin/users' : '/stocks');
     }
 
-    public function render(): View
+    public function render()
     {
         return view('livewire.auth.login');
     }

@@ -4,8 +4,7 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite",
-        "test": "composer test"
+        "dev": "vite"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
@@ -16,12 +15,5 @@
     },
     "optionalDependencies": {
         "@laravel/multiplex": "^0.4.1"
-    },
-    "dependencies": {
-        "@toast-ui/editor": "^3.2.2",
-        "cropperjs": "^1.6.2"
-    },
-    "overrides": {
-        "dompurify": "^3.4.17"
     }
 }

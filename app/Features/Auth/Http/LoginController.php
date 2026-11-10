@@ -24,12 +24,12 @@ class LoginController
 
         if (! $action->execute($credentials['username'], $credentials['password'], $request->boolean('remember'))) {
             return back()
-                ->withErrors(['login' => 'Username/email atau password yang Anda masukkan tidak sesuai.'])
+                ->withErrors(['login' => 'Username/email atau password salah.'])
                 ->onlyInput('username');
         }
 
-        return $request->user()->isAdmin()
-            ? redirect()->route('admin.users')
-            : redirect()->route('stocks.index');
+        $request->session()->regenerate();
+
+        return redirect($request->user()->isAdmin() ? '/admin/users' : '/stocks');
     }
 }
