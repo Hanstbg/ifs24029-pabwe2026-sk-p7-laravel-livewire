@@ -29,5 +29,5 @@ RUN composer dump-autoload --optimize --no-dev --no-scripts \
     && chmod -R 777 storage bootstrap/cache
 
 COPY Caddyfile /etc/frankenphp/Caddyfile
-
+ENV SERVER_NAME=:80
 EXPOSE 80
