@@ -13,7 +13,7 @@ class RoutingTest extends TestCase
 
     public function test_root_redirects(): void
     {
-        $this->get('/')->assertRedirect('/login');
+        $this->get('/')->assertOk()->assertSee('id="login-submit"', false);
         $this->actingAs(User::factory()->create())->get('/')->assertRedirect('/stocks');
         $this->actingAs(User::factory()->admin()->create())->get('/')->assertRedirect('/admin/users');
     }

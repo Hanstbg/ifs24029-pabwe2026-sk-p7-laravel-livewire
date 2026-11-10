@@ -2,6 +2,7 @@
 
 use App\Features\Admin\Livewire\AdminUserStockList;
 use App\Features\Admin\Livewire\UserList;
+use App\Features\Auth\Http\LoginController;
 use App\Features\Auth\Livewire\Login;
 use App\Features\Auth\Livewire\Register;
 use App\Features\Profile\Livewire\Profile;
@@ -12,16 +13,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('throttle:1000-per-second')->group(function () {
-    Route::get('/', function () {
-        if (! Auth::check()) {
-            return redirect('/login');
-        }
-
-        return redirect(Auth::user()->isAdmin() ? '/admin/users' : '/stocks');
-    });
+    // Guest langsung melihat halaman login (HTTP 200, tanpa redirect).
+    // User yang sudah login diarahkan sesuai role lewat redirectUsersTo di bootstrap/app.php.
+    Route::get('/', Login::class)->middleware('guest')->name('home');
 
     Route::middleware('guest')->group(function () {
         Route::get('/login', Login::class)->name('login');
+        Route::post('/login', [LoginController::class, 'store'])->name('login.store');
         Route::get('/register', Register::class)->name('register');
     });
 
